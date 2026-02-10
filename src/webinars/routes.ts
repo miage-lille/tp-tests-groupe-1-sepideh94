@@ -1,14 +1,44 @@
 import { FastifyInstance } from 'fastify';
 import { AppContainer } from 'src/container';
 import { User } from 'src/users/entities/user.entity';
+import { WebinarDatesTooSoonException } from 'src/webinars/exceptions/webinar-dates-too-soon';
+import { WebinarNotEnoughSeatsException } from 'src/webinars/exceptions/webinar-not-enough-seats';
 import { WebinarNotFoundException } from 'src/webinars/exceptions/webinar-not-found';
 import { WebinarNotOrganizerException } from 'src/webinars/exceptions/webinar-not-organizer';
+import { WebinarTooManySeatsException } from 'src/webinars/exceptions/webinar-too-many-seats';
 
 export async function webinarRoutes(
   fastify: FastifyInstance,
   container: AppContainer,
 ) {
   const changeSeatsUseCase = container.getChangeSeatsUseCase();
+  const organizeWebinarsUseCase = container.getOrganizeWebinarsUseCase();
+
+  fastify.post<{
+    Body: { title: string; seats: string; startDate: string; endDate: string };
+  }>('/webinars', {}, async (request, reply) => {
+    const command = {
+      userId: 'test-user',
+      title: request.body.title,
+      seats: parseInt(request.body.seats, 10),
+      startDate: new Date(request.body.startDate),
+      endDate: new Date(request.body.endDate),
+    };
+
+    try {
+      const result = await organizeWebinarsUseCase.execute(command);
+      reply.status(201).send({ id: result.id });
+    } catch (err) {
+      if (
+        err instanceof WebinarDatesTooSoonException ||
+        err instanceof WebinarTooManySeatsException ||
+        err instanceof WebinarNotEnoughSeatsException
+      ) {
+        return reply.status(400).send({ error: err.message });
+      }
+      reply.status(500).send({ error: 'An error occurred' });
+    }
+  });
 
   fastify.post<{
     Body: { seats: string };
